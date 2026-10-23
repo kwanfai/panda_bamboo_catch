@@ -1,0 +1,1010 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Panda Bamboo Catch & Dodge</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&display=swap');
+        
+        * {
+            font-family: 'Fredoka', sans-serif;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        body {
+            touch-action: manipulation;
+            overflow: hidden;
+            background: linear-gradient(to bottom, #134e4a, #064e3b);
+        }
+
+        .custom-glass {
+            background: rgba(255, 255, 255, 0.2);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 2px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .btn-bounce {
+            transition: transform 0.1s ease, box-shadow 0.1s ease;
+        }
+
+        .btn-bounce:active {
+            transform: scale(0.95);
+        }
+
+        /* Control Pad pulse for touch devices */
+        .touch-btn:active {
+            background-color: rgba(255, 255, 255, 0.4) !important;
+        }
+    </style>
+</head>
+<body class="h-screen w-screen flex items-center justify-center p-2 sm:p-4 text-slate-800">
+
+    <!-- Main Game Container -->
+    <div class="relative w-full max-w-4xl h-full max-h-[850px] bg-emerald-900 rounded-3xl shadow-2xl overflow-hidden border-4 border-emerald-600 flex flex-col">
+        
+        <!-- Header / HUD Layer -->
+        <div id="hud" class="absolute top-0 left-0 right-0 z-10 p-3 sm:p-4 flex justify-between items-center pointer-events-none">
+            <!-- Score & Combo -->
+            <div class="flex flex-col gap-1">
+                <div class="custom-glass px-4 py-2 rounded-2xl flex items-center gap-3 text-white shadow-lg pointer-events-auto">
+                    <i data-lucide="trophy" class="w-6 h-6 text-yellow-300"></i>
+                    <div>
+                        <div class="text-xs uppercase tracking-wider text-emerald-200 font-semibold">Score</div>
+                        <div id="scoreText" class="text-2xl font-bold leading-none text-white">0</div>
+                    </div>
+                </div>
+                <div id="comboBadge" class="opacity-0 transition-opacity duration-300 custom-glass px-3 py-1 rounded-xl bg-amber-500/30 text-amber-300 text-xs font-bold w-max border border-amber-400/40">
+                    COMBO x<span id="comboCount">1</span>!
+                </div>
+            </div>
+
+            <!-- Active Power-up Indicator -->
+            <div id="powerupStatus" class="hidden custom-glass px-4 py-2 rounded-2xl text-yellow-300 flex items-center gap-2 font-bold animate-pulse border-yellow-400">
+                <i data-lucide="zap" class="w-5 h-5 fill-yellow-300"></i>
+                <span id="powerupText" class="text-sm">MAGNET ACTIVE!</span>
+            </div>
+
+            <!-- Lives & High Score -->
+            <div class="flex flex-col items-end gap-1">
+                <div class="custom-glass px-4 py-2 rounded-2xl flex items-center gap-2 text-white shadow-lg pointer-events-auto">
+                    <div id="livesContainer" class="flex items-center gap-1">
+                        <!-- Lives icons rendered dynamically -->
+                    </div>
+                </div>
+                <div class="text-xs text-emerald-200/80 bg-black/30 px-3 py-1 rounded-full font-medium">
+                    Best: <span id="highScoreText" class="text-yellow-300 font-bold">0</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Canvas Game Screen -->
+        <canvas id="gameCanvas" class="w-full h-full block cursor-pointer"></canvas>
+
+        <!-- On-Screen Touch Controls (Visible on mobile/tablet) -->
+        <div id="touchControls" class="absolute bottom-4 left-0 right-0 z-10 flex justify-between px-6 pointer-events-none md:hidden">
+            <button id="btnLeft" class="touch-btn pointer-events-auto w-20 h-20 rounded-full custom-glass bg-white/20 active:bg-white/40 flex items-center justify-center text-white text-3xl shadow-xl active:scale-95 transition-transform">
+                <i data-lucide="chevron-left" class="w-10 h-10"></i>
+            </button>
+            <button id="btnRight" class="touch-btn pointer-events-auto w-20 h-20 rounded-full custom-glass bg-white/20 active:bg-white/40 flex items-center justify-center text-white text-3xl shadow-xl active:scale-95 transition-transform">
+                <i data-lucide="chevron-right" class="w-10 h-10"></i>
+            </button>
+        </div>
+
+        <!-- Pause Button (Top Right corner inside canvas overlay zone) -->
+        <button id="btnPause" class="absolute top-4 right-4 z-20 custom-glass p-2.5 rounded-2xl text-white hover:bg-white/30 transition-colors pointer-events-auto hidden">
+            <i data-lucide="pause" class="w-6 h-6"></i>
+        </button>
+
+        <!-- Start Overlay -->
+        <div id="startScreen" class="absolute inset-0 z-30 bg-emerald-950/80 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center text-white">
+            <div class="w-24 h-24 mb-3 rounded-full bg-emerald-700/50 flex items-center justify-center ring-4 ring-emerald-400/40 shadow-inner">
+                <span class="text-6xl">🐼</span>
+            </div>
+            <h1 class="text-4xl sm:text-5xl font-extrabold tracking-wide mb-2 text-transparent bg-clip-text bg-gradient-to-r from-emerald-200 via-green-300 to-yellow-200">
+                PANDA BAMBOO CATCH
+            </h1>
+            <p class="text-emerald-200/90 max-w-md text-sm sm:text-base mb-6">
+                Guide the hungry panda! Catch delicious green bamboo and golden bonuses while dodging dangerous rocks and spike bombs!
+            </p>
+
+            <!-- Instructions Card -->
+            <div class="custom-glass p-4 rounded-2xl max-w-sm w-full mb-6 text-left text-xs sm:text-sm space-y-2 text-emerald-100">
+                <div class="flex items-center gap-3">
+                    <span class="text-2xl">🎋</span>
+                    <span><strong>Green Bamboo:</strong> +10 Points</span>
+                </div>
+                <div class="flex items-center gap-3">
+                    <span class="text-2xl">🌟</span>
+                    <span><strong>Golden Bamboo:</strong> +30 Points + Magnet Power!</span>
+                </div>
+                <div class="flex items-center gap-3">
+                    <span class="text-2xl">💣</span>
+                    <span><strong>Rocks & Bombs:</strong> Lose 1 Heart!</span>
+                </div>
+                <div class="mt-2 pt-2 border-t border-emerald-500/30 text-center text-xs text-emerald-300">
+                    Use <strong>Arrow Keys / A & D</strong>, <strong>Mouse/Touch Drag</strong>, or <strong>On-Screen Buttons</strong>.
+                </div>
+            </div>
+
+            <button id="btnStart" class="btn-bounce bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-emerald-950 text-xl font-bold px-10 py-4 rounded-2xl shadow-xl hover:shadow-2xl flex items-center gap-3 border-2 border-yellow-200">
+                <i data-lucide="play" class="fill-current w-6 h-6"></i> START GAME
+            </button>
+        </div>
+
+        <!-- Pause Screen Overlay -->
+        <div id="pauseScreen" class="hidden absolute inset-0 z-30 bg-emerald-950/85 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center text-white">
+            <h2 class="text-4xl font-extrabold mb-4 text-yellow-300">GAME PAUSED</h2>
+            <div class="flex flex-col gap-3 w-48">
+                <button id="btnResume" class="btn-bounce bg-emerald-500 hover:bg-emerald-400 text-white font-bold py-3 rounded-xl shadow-lg flex items-center justify-center gap-2">
+                    <i data-lucide="play" class="w-5 h-5 fill-current"></i> Resume
+                </button>
+                <button id="btnRestartPause" class="btn-bounce bg-white/20 hover:bg-white/30 text-white font-bold py-3 rounded-xl shadow-lg flex items-center justify-center gap-2">
+                    <i data-lucide="rotate-ccw" class="w-5 h-5"></i> Restart
+                </button>
+            </div>
+        </div>
+
+        <!-- Game Over Screen Overlay -->
+        <div id="gameOverScreen" class="hidden absolute inset-0 z-30 bg-black/80 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center text-white">
+            <div class="w-20 h-20 mb-3 rounded-full bg-red-500/20 flex items-center justify-center ring-4 ring-red-400/30">
+                <span class="text-5xl">😵</span>
+            </div>
+            <h2 class="text-4xl font-extrabold text-red-400 mb-1">GAME OVER</h2>
+            <p id="gameOverReason" class="text-slate-300 text-sm mb-4">You ran out of lives!</p>
+
+            <div class="custom-glass p-5 rounded-2xl w-full max-w-xs mb-6 space-y-3">
+                <div class="flex justify-between items-center text-slate-200">
+                    <span>Final Score:</span>
+                    <span id="finalScore" class="text-2xl font-bold text-yellow-300">0</span>
+                </div>
+                <div class="flex justify-between items-center text-slate-200 border-t border-white/10 pt-2">
+                    <span>High Score:</span>
+                    <span id="finalHighScore" class="text-xl font-bold text-emerald-300">0</span>
+                </div>
+            </div>
+
+            <button id="btnRestart" class="btn-bounce bg-gradient-to-r from-emerald-400 to-green-500 hover:from-emerald-300 hover:to-green-400 text-emerald-950 text-lg font-bold px-8 py-3.5 rounded-2xl shadow-xl flex items-center gap-2">
+                <i data-lucide="rotate-ccw" class="w-5 h-5"></i> PLAY AGAIN
+            </button>
+        </div>
+
+    </div>
+
+    <!-- Audio & Game Logic -->
+    <script>
+        // Initialize Lucide Icons
+        lucide.createIcons();
+
+        // Audio Synthesizer (Web Audio API)
+        class SoundEffects {
+            constructor() {
+                this.ctx = null;
+            }
+
+            init() {
+                if (!this.ctx) {
+                    const AudioContext = window.AudioContext || window.webkitAudioContext;
+                    this.ctx = new AudioContext();
+                }
+            }
+
+            playCatch() {
+                if (!this.ctx) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(440, this.ctx.currentTime); // A4
+                osc.frequency.exponentialRampToValueAtTime(880, this.ctx.currentTime + 0.12); // A5
+
+                gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.12);
+
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.12);
+            }
+
+            playBonus() {
+                if (!this.ctx) return;
+                const now = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(523.25, now); // C5
+                osc.frequency.setValueAtTime(659.25, now + 0.08); // E5
+                osc.frequency.setValueAtTime(783.99, now + 0.16); // G5
+                osc.frequency.setValueAtTime(1046.50, now + 0.24); // C6
+
+                gain.gain.setValueAtTime(0.25, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.35);
+
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start();
+                osc.stop(now + 0.35);
+            }
+
+            playHit() {
+                if (!this.ctx) return;
+                const now = this.ctx.currentTime;
+                
+                // Low pitch thud + noise burst
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(180, now);
+                osc.frequency.exponentialRampToValueAtTime(40, now + 0.25);
+
+                gain.gain.setValueAtTime(0.4, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.25);
+
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start();
+                osc.stop(now + 0.25);
+            }
+
+            playGameOver() {
+                if (!this.ctx) return;
+                const now = this.ctx.currentTime;
+                const notes = [300, 260, 220, 150];
+                notes.forEach((freq, i) => {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(freq, now + i * 0.12);
+                    gain.gain.setValueAtTime(0.3, now + i * 0.12);
+                    gain.gain.exponentialRampToValueAtTime(0.01, now + (i + 1) * 0.12);
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start(now + i * 0.12);
+                    osc.stop(now + (i + 1) * 0.12);
+                });
+            }
+        }
+
+        const sfx = new SoundEffects();
+
+        // Game Configuration & Engine Variables
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        let width = 0;
+        let height = 0;
+
+        let gameState = 'START'; // START, PLAYING, PAUSED, GAMEOVER
+        let score = 0;
+        let combo = 0;
+        let lives = 3;
+        let maxLives = 3;
+        let highScore = parseInt(localStorage.getItem('panda_bamboo_high_score') || '0', 10);
+
+        let lastTime = 0;
+        let spawnTimer = 0;
+        let spawnInterval = 1000; // ms
+        let gameSpeedMultiplier = 1;
+
+        let keys = { left: false, right: false };
+        let touchMoveX = null;
+
+        let particles = [];
+        let floatingTexts = [];
+        let items = [];
+
+        // Magnet Powerup State
+        let magnetActive = false;
+        let magnetTimer = 0;
+
+        // Player Panda Object
+        const panda = {
+            x: 0,
+            y: 0,
+            width: 70,
+            height: 70,
+            speed: 550, // px per sec
+            vx: 0,
+            facing: 'right', // 'left' or 'right'
+            basketYOffset: 10,
+            mouthOpen: false,
+            mouthTimer: 0,
+
+            update(dt) {
+                // Movement via Keyboard / On-screen Buttons
+                if (keys.left) {
+                    this.vx = -this.speed;
+                    this.facing = 'left';
+                } else if (keys.right) {
+                    this.vx = this.speed;
+                    this.facing = 'right';
+                } else if (touchMoveX !== null) {
+                    // Smooth tracking towards touch/mouse position
+                    const diff = touchMoveX - (this.x + this.width / 2);
+                    if (Math.abs(diff) > 5) {
+                        this.vx = Math.sign(diff) * Math.min(Math.abs(diff) * 10, this.speed);
+                        this.facing = diff < 0 ? 'left' : 'right';
+                    } else {
+                        this.vx = 0;
+                    }
+                } else {
+                    this.vx = 0;
+                }
+
+                this.x += this.vx * dt;
+
+                // Boundary Constraints
+                if (this.x < 10) this.x = 10;
+                if (this.x + this.width > width - 10) this.x = width - 10 - this.width;
+
+                this.y = height - this.height - 25; // Fixed near bottom
+
+                // Mouth open animation state
+                if (this.mouthTimer > 0) {
+                    this.mouthTimer -= dt;
+                    if (this.mouthTimer <= 0) this.mouthOpen = false;
+                }
+            },
+
+            triggerEat() {
+                this.mouthOpen = true;
+                this.mouthTimer = 0.25;
+            },
+
+            draw(ctx) {
+                ctx.save();
+                ctx.translate(this.x + this.width / 2, this.y + this.height / 2);
+                if (this.facing === 'left') {
+                    ctx.scale(-1, 1);
+                }
+
+                // Shadow
+                ctx.beginPath();
+                ctx.ellipse(0, this.height / 2 - 2, this.width / 2.2, 8, 0, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
+                ctx.fill();
+
+                // Body (Cute Rounded Panda)
+                ctx.beginPath();
+                ctx.arc(0, 10, 24, 0, Math.PI * 2);
+                ctx.fillStyle = '#f8fafc';
+                ctx.fill();
+
+                // Arms / Hands
+                ctx.fillStyle = '#0f172a';
+                ctx.beginPath();
+                ctx.ellipse(-20, 8, 8, 12, Math.PI / 4, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.ellipse(20, 8, 8, 12, -Math.PI / 4, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Head
+                ctx.beginPath();
+                ctx.arc(0, -12, 25, 0, Math.PI * 2);
+                ctx.fillStyle = '#ffffff';
+                ctx.fill();
+
+                // Ears
+                ctx.fillStyle = '#0f172a';
+                ctx.beginPath();
+                ctx.arc(-20, -30, 9, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(20, -30, 9, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Inner Ear details
+                ctx.fillStyle = '#f43f5e';
+                ctx.beginPath();
+                ctx.arc(-20, -30, 4, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(20, -30, 4, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Eye Patches
+                ctx.fillStyle = '#0f172a';
+                ctx.beginPath();
+                ctx.ellipse(-10, -14, 7, 9, -Math.PI / 10, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.ellipse(10, -14, 7, 9, Math.PI / 10, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Eyes (Pupils with white sparkles)
+                ctx.fillStyle = '#ffffff';
+                ctx.beginPath();
+                ctx.arc(-9, -15, 2.5, 0, Math.PI * 2);
+                ctx.arc(11, -15, 2.5, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Cheeks (Blush)
+                ctx.fillStyle = 'rgba(251, 113, 133, 0.5)';
+                ctx.beginPath();
+                ctx.arc(-16, -6, 5, 0, Math.PI * 2);
+                ctx.arc(16, -6, 5, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Nose
+                ctx.fillStyle = '#0f172a';
+                ctx.beginPath();
+                ctx.ellipse(0, -8, 4, 2.5, 0, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Mouth
+                ctx.strokeStyle = '#0f172a';
+                ctx.lineWidth = 2;
+                if (this.mouthOpen) {
+                    ctx.beginPath();
+                    ctx.arc(0, -4, 6, 0, Math.PI);
+                    ctx.fillStyle = '#f43f5e';
+                    ctx.fill();
+                    ctx.stroke();
+                } else {
+                    ctx.beginPath();
+                    ctx.arc(-3, -4, 3, 0.1, Math.PI - 0.2);
+                    ctx.stroke();
+                    ctx.beginPath();
+                    ctx.arc(3, -4, 3, 0.1, Math.PI - 0.2);
+                    ctx.stroke();
+                }
+
+                // Woven Bamboo Basket held in front
+                ctx.fillStyle = '#d97706';
+                ctx.beginPath();
+                ctx.ellipse(0, 16, 26, 12, 0, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.strokeStyle = '#92400e';
+                ctx.lineWidth = 2.5;
+                ctx.stroke();
+
+                // Basket weave texture line
+                ctx.strokeStyle = '#b45309';
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.moveTo(-20, 16);
+                ctx.lineTo(20, 16);
+                ctx.stroke();
+
+                // Magnet Aura effect
+                if (magnetActive) {
+                    ctx.strokeStyle = 'rgba(250, 204, 21, 0.6)';
+                    ctx.lineWidth = 3;
+                    ctx.setLineDash([6, 6]);
+                    ctx.beginPath();
+                    ctx.arc(0, 0, 48, 0, Math.PI * 2);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                }
+
+                ctx.restore();
+            }
+        };
+
+        // Item Class (Bamboo, Golden Bamboo, Bomb/Rock)
+        class Item {
+            constructor(x, type) {
+                this.x = x;
+                this.y = -40;
+                this.type = type; // 'bamboo', 'golden', 'bomb'
+                this.size = 32;
+                this.speed = (180 + Math.random() * 80) * gameSpeedMultiplier;
+                this.rotation = Math.random() * Math.PI * 2;
+                this.rotSpeed = (Math.random() - 0.5) * 3;
+            }
+
+            update(dt) {
+                // Magnet Effect logic for bamboo items
+                if (magnetActive && (this.type === 'bamboo' || this.type === 'golden')) {
+                    const pandaCenterX = panda.x + panda.width / 2;
+                    const pandaCenterY = panda.y + panda.height / 2;
+                    const dx = pandaCenterX - this.x;
+                    const dy = pandaCenterY - this.y;
+                    const dist = Math.hypot(dx, dy);
+
+                    if (dist < 260) {
+                        this.x += (dx / dist) * 380 * dt;
+                        this.y += (dy / dist) * 380 * dt;
+                    }
+                }
+
+                this.y += this.speed * dt;
+                this.rotation += this.rotSpeed * dt;
+            }
+
+            draw(ctx) {
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                ctx.rotate(this.rotation);
+
+                if (this.type === 'bamboo') {
+                    // Green Bamboo stalk
+                    ctx.fillStyle = '#22c55e';
+                    ctx.beginPath();
+                    ctx.roundRect(-8, -20, 16, 40, 4);
+                    ctx.fill();
+
+                    // Joints
+                    ctx.fillStyle = '#15803d';
+                    ctx.fillRect(-9, -6, 18, 3);
+                    ctx.fillRect(-9, 8, 18, 3);
+
+                    // Leaves
+                    ctx.fillStyle = '#4ade80';
+                    ctx.beginPath();
+                    ctx.ellipse(-12, -10, 10, 4, -Math.PI / 4, 0, Math.PI * 2);
+                    ctx.ellipse(12, 4, 10, 4, Math.PI / 4, 0, Math.PI * 2);
+                    ctx.fill();
+
+                } else if (this.type === 'golden') {
+                    // Golden Bamboo with glowing aura
+                    ctx.shadowColor = '#facc15';
+                    ctx.shadowBlur = 12;
+
+                    ctx.fillStyle = '#facc15';
+                    ctx.beginPath();
+                    ctx.roundRect(-9, -22, 18, 44, 5);
+                    ctx.fill();
+
+                    ctx.fillStyle = '#ca8a04';
+                    ctx.fillRect(-10, -6, 20, 4);
+                    ctx.fillRect(-10, 10, 20, 4);
+
+                    // Leaves
+                    ctx.fillStyle = '#fef08a';
+                    ctx.beginPath();
+                    ctx.ellipse(-14, -12, 12, 5, -Math.PI / 4, 0, Math.PI * 2);
+                    ctx.ellipse(14, 6, 12, 5, Math.PI / 4, 0, Math.PI * 2);
+                    ctx.fill();
+
+                } else if (this.type === 'bomb') {
+                    // Spiked Rock / Bomb
+                    ctx.fillStyle = '#334155';
+                    ctx.beginPath();
+                    ctx.arc(0, 0, 18, 0, Math.PI * 2);
+                    ctx.fill();
+
+                    // Spikes/Rough edges
+                    ctx.fillStyle = '#1e293b';
+                    for (let i = 0; i < 6; i++) {
+                        const angle = (i * Math.PI) / 3;
+                        const sx = Math.cos(angle) * 18;
+                        const sy = Math.sin(angle) * 18;
+                        ctx.beginPath();
+                        ctx.arc(sx, sy, 5, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+
+                    // Warning Skull/X mark
+                    ctx.strokeStyle = '#ef4444';
+                    ctx.lineWidth = 3;
+                    ctx.beginPath();
+                    ctx.moveTo(-6, -6);
+                    ctx.lineTo(6, 6);
+                    ctx.moveTo(6, -6);
+                    ctx.lineTo(-6, 6);
+                    ctx.stroke();
+                }
+
+                ctx.restore();
+            }
+        }
+
+        // Particle Visual Effect Class
+        class Particle {
+            constructor(x, y, color) {
+                this.x = x;
+                this.y = y;
+                this.color = color;
+                this.radius = Math.random() * 4 + 2;
+                this.vx = (Math.random() - 0.5) * 220;
+                this.vy = (Math.random() - 0.5) * 220 - 50;
+                this.alpha = 1;
+                this.life = Math.random() * 0.4 + 0.3;
+            }
+
+            update(dt) {
+                this.x += this.vx * dt;
+                this.y += this.vy * dt;
+                this.alpha -= dt / this.life;
+            }
+
+            draw(ctx) {
+                if (this.alpha <= 0) return;
+                ctx.save();
+                ctx.globalAlpha = Math.max(0, this.alpha);
+                ctx.fillStyle = this.color;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            }
+        }
+
+        // Floating Scores (+10, -1 Life) Text
+        class FloatingText {
+            constructor(x, y, text, color) {
+                this.x = x;
+                this.y = y;
+                this.text = text;
+                this.color = color;
+                this.alpha = 1;
+                this.vy = -60;
+            }
+
+            update(dt) {
+                this.y += this.vy * dt;
+                this.alpha -= dt * 1.5;
+            }
+
+            draw(ctx) {
+                if (this.alpha <= 0) return;
+                ctx.save();
+                ctx.globalAlpha = Math.max(0, this.alpha);
+                ctx.font = 'bold 20px Fredoka, sans-serif';
+                ctx.fillStyle = this.color;
+                ctx.textAlign = 'center';
+                ctx.fillText(this.text, this.x, this.y);
+                ctx.restore();
+            }
+        }
+
+        // Canvas Setup & Resize Logic
+        function resizeCanvas() {
+            const container = canvas.parentElement;
+            width = container.clientWidth;
+            height = container.clientHeight;
+            canvas.width = width;
+            canvas.height = height;
+
+            panda.y = height - panda.height - 25;
+        }
+
+        window.addEventListener('resize', resizeCanvas);
+
+        // Spawn Items Manager
+        function spawnItem() {
+            const margin = 40;
+            const spawnX = margin + Math.random() * (width - margin * 2);
+
+            // Weighted probabilities: 65% Bamboo, 15% Golden, 20% Bomb
+            const rand = Math.random();
+            let type = 'bamboo';
+            if (rand > 0.80) {
+                type = 'golden';
+            } else if (rand > 0.60) {
+                type = 'bomb';
+            }
+
+            items.push(new Item(spawnX, type));
+        }
+
+        // Trigger Explosion / Particle burst
+        function createBurst(x, y, color, count = 12) {
+            for (let i = 0; i < count; i++) {
+                particles.push(new Particle(x, y, color));
+            }
+        }
+
+        // Update HUD display elements
+        function updateHUD() {
+            document.getElementById('scoreText').innerText = score;
+            document.getElementById('highScoreText').innerText = highScore;
+
+            // Render Heart Icons for Lives
+            const livesContainer = document.getElementById('livesContainer');
+            livesContainer.innerHTML = '';
+            for (let i = 0; i < maxLives; i++) {
+                const heart = document.createElement('i');
+                heart.setAttribute('data-lucide', 'heart');
+                heart.className = `w-6 h-6 transition-transform duration-200 ${i < lives ? 'text-red-400 fill-red-500 scale-100' : 'text-slate-500/40 scale-90'}`;
+                livesContainer.appendChild(heart);
+            }
+            lucide.createIcons();
+
+            // Combo badge
+            const comboBadge = document.getElementById('comboBadge');
+            if (combo > 1) {
+                comboBadge.classList.remove('opacity-0');
+                document.getElementById('comboCount').innerText = combo;
+            } else {
+                comboBadge.classList.add('opacity-0');
+            }
+
+            // Powerup status HUD
+            const powerupStatus = document.getElementById('powerupStatus');
+            if (magnetActive) {
+                powerupStatus.classList.remove('hidden');
+            } else {
+                powerupStatus.classList.add('hidden');
+            }
+        }
+
+        // Draw Bamboo Forest Background on Canvas
+        function drawBackground() {
+            // Gradient Sky / Forest Backing
+            const bgGradient = ctx.createLinearGradient(0, 0, 0, height);
+            bgGradient.addColorStop(0, '#064e3b');
+            bgGradient.addColorStop(0.6, '#047857');
+            bgGradient.addColorStop(1, '#10b981');
+            ctx.fillStyle = bgGradient;
+            ctx.fillRect(0, 0, width, height);
+
+            // Background Bamboo Stalks (Parallax/Decorative)
+            ctx.fillStyle = 'rgba(2, 44, 34, 0.25)';
+            const stalkPositions = [0.1, 0.22, 0.38, 0.55, 0.72, 0.88];
+            stalkPositions.forEach(pos => {
+                const x = width * pos;
+                ctx.fillRect(x, 0, 18, height);
+                // Joint details
+                for (let y = 40; y < height; y += 120) {
+                    ctx.fillRect(x - 3, y, 24, 4);
+                }
+            });
+
+            // Foreground Ground Line
+            ctx.fillStyle = '#064e3b';
+            ctx.fillRect(0, height - 25, width, 25);
+            ctx.fillStyle = '#059669';
+            ctx.fillRect(0, height - 25, width, 5);
+        }
+
+        // Main Game Loop
+        function gameLoop(timestamp) {
+            if (!lastTime) lastTime = timestamp;
+            const dt = Math.min((timestamp - lastTime) / 1000, 0.1); // Cap delta to avoid leaps
+            lastTime = timestamp;
+
+            if (gameState === 'PLAYING') {
+                // Handle Spawn Timing
+                spawnTimer += dt * 1000;
+                if (spawnTimer >= spawnInterval) {
+                    spawnItem();
+                    spawnTimer = 0;
+                    // Gradually decrease interval down to min 380ms
+                    spawnInterval = Math.max(380, 1000 - Math.floor(score / 50) * 40);
+                    // Gradually increase speed multiplier
+                    gameSpeedMultiplier = 1 + Math.min(score / 300, 1.2);
+                }
+
+                // Handle Magnet Powerup Timer
+                if (magnetActive) {
+                    magnetTimer -= dt;
+                    if (magnetTimer <= 0) {
+                        magnetActive = false;
+                        updateHUD();
+                    }
+                }
+
+                // Update Panda Position
+                panda.update(dt);
+
+                // Update Items and Collisions
+                for (let i = items.length - 1; i >= 0; i--) {
+                    const item = items[i];
+                    item.update(dt);
+
+                    // Check Collision with Panda Basket area
+                    const basketX = panda.x + panda.width / 2;
+                    const basketY = panda.y + 15;
+                    const dist = Math.hypot(item.x - basketX, item.y - basketY);
+
+                    if (dist < 38) {
+                        // Catch Item!
+                        panda.triggerEat();
+
+                        if (item.type === 'bamboo') {
+                            combo++;
+                            const points = 10 * (combo > 3 ? 2 : 1);
+                            score += points;
+                            sfx.playCatch();
+                            createBurst(item.x, item.y, '#4ade80');
+                            floatingTexts.push(new FloatingText(item.x, item.y, `+${points}`, '#4ade80'));
+
+                        } else if (item.type === 'golden') {
+                            combo++;
+                            const points = 30;
+                            score += points;
+                            sfx.playBonus();
+                            createBurst(item.x, item.y, '#facc15', 20);
+                            floatingTexts.push(new FloatingText(item.x, item.y, `+${points} MAGNET!`, '#facc15'));
+
+                            // Trigger Magnet
+                            magnetActive = true;
+                            magnetTimer = 6; // 6 seconds
+
+                        } else if (item.type === 'bomb') {
+                            combo = 0;
+                            lives--;
+                            sfx.playHit();
+                            createBurst(item.x, item.y, '#f87171', 22);
+                            floatingTexts.push(new FloatingText(item.x, item.y, '-1 LIFE!', '#f87171'));
+
+                            // Screen shake effect canvas container
+                            canvas.parentElement.classList.add('translate-x-1');
+                            setTimeout(() => canvas.parentElement.classList.remove('translate-x-1'), 150);
+
+                            if (lives <= 0) {
+                                gameOver();
+                            }
+                        }
+
+                        updateHUD();
+                        items.splice(i, 1);
+                        continue;
+                    }
+
+                    // Item hit bottom ground
+                    if (item.y > height - 20) {
+                        if (item.type === 'bamboo') {
+                            // Reset combo on missed bamboo
+                            combo = 0;
+                            updateHUD();
+                        }
+                        items.splice(i, 1);
+                    }
+                }
+
+                // Update Particles
+                for (let i = particles.length - 1; i >= 0; i--) {
+                    particles[i].update(dt);
+                    if (particles[i].alpha <= 0) particles.splice(i, 1);
+                }
+
+                // Update Floating Texts
+                for (let i = floatingTexts.length - 1; i >= 0; i--) {
+                    floatingTexts[i].update(dt);
+                    if (floatingTexts[i].alpha <= 0) floatingTexts.splice(i, 1);
+                }
+            }
+
+            // Render Frame
+            ctx.clearRect(0, 0, width, height);
+            drawBackground();
+
+            // Draw Entities
+            items.forEach(item => item.draw(ctx));
+            panda.draw(ctx);
+            particles.forEach(p => p.draw(ctx));
+            floatingTexts.forEach(ft => ft.draw(ctx));
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Start Game Engine
+        function startGame() {
+            sfx.init();
+            score = 0;
+            combo = 0;
+            lives = maxLives;
+            spawnInterval = 1000;
+            gameSpeedMultiplier = 1;
+            items = [];
+            particles = [];
+            floatingTexts = [];
+            magnetActive = false;
+
+            panda.x = width / 2 - panda.width / 2;
+
+            gameState = 'PLAYING';
+            updateHUD();
+
+            document.getElementById('startScreen').classList.add('hidden');
+            document.getElementById('gameOverScreen').classList.add('hidden');
+            document.getElementById('pauseScreen').classList.add('hidden');
+            document.getElementById('btnPause').classList.remove('hidden');
+        }
+
+        // Pause Game
+        function pauseGame() {
+            if (gameState !== 'PLAYING') return;
+            gameState = 'PAUSED';
+            document.getElementById('pauseScreen').classList.remove('hidden');
+        }
+
+        // Resume Game
+        function resumeGame() {
+            if (gameState !== 'PAUSED') return;
+            gameState = 'PLAYING';
+            document.getElementById('pauseScreen').classList.add('hidden');
+            lastTime = performance.now();
+        }
+
+        // Game Over Handler
+        function gameOver() {
+            gameState = 'GAMEOVER';
+            sfx.playGameOver();
+
+            if (score > highScore) {
+                highScore = score;
+                localStorage.setItem('panda_bamboo_high_score', highScore.toString());
+            }
+
+            document.getElementById('finalScore').innerText = score;
+            document.getElementById('finalHighScore').innerText = highScore;
+            document.getElementById('btnPause').classList.add('hidden');
+            document.getElementById('gameOverScreen').classList.remove('hidden');
+        }
+
+        // Controls / Event Listeners
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') {
+                keys.left = true;
+            } else if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') {
+                keys.right = true;
+            } else if (e.key === 'p' || e.key === 'P' || e.key === 'Escape') {
+                if (gameState === 'PLAYING') pauseGame();
+                else if (gameState === 'PAUSED') resumeGame();
+            }
+        });
+
+        window.addEventListener('keyup', (e) => {
+            if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') {
+                keys.left = false;
+            } else if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') {
+                keys.right = false;
+            }
+        });
+
+        // Mouse / Touch Drag Support
+        function handlePointerMove(e) {
+            if (gameState !== 'PLAYING') return;
+            const rect = canvas.getBoundingClientRect();
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            touchMoveX = clientX - rect.left;
+        }
+
+        function handlePointerEnd() {
+            touchMoveX = null;
+        }
+
+        canvas.addEventListener('mousemove', handlePointerMove);
+        canvas.addEventListener('touchmove', handlePointerMove, { passive: true });
+        canvas.addEventListener('touchend', handlePointerEnd);
+        canvas.addEventListener('mouseleave', handlePointerEnd);
+
+        // Touch Control Buttons
+        const btnLeft = document.getElementById('btnLeft');
+        const btnRight = document.getElementById('btnRight');
+
+        const bindTouchBtn = (btn, key) => {
+            btn.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                keys[key] = true;
+            });
+            btn.addEventListener('touchend', (e) => {
+                e.preventDefault();
+                keys[key] = false;
+            });
+            btn.addEventListener('mousedown', () => keys[key] = true);
+            btn.addEventListener('mouseup', () => keys[key] = false);
+        };
+
+        bindTouchBtn(btnLeft, 'left');
+        bindTouchBtn(btnRight, 'right');
+
+        // UI Buttons
+        document.getElementById('btnStart').addEventListener('click', startGame);
+        document.getElementById('btnRestart').addEventListener('click', startGame);
+        document.getElementById('btnRestartPause').addEventListener('click', startGame);
+        document.getElementById('btnPause').addEventListener('click', pauseGame);
+        document.getElementById('btnResume').addEventListener('click', resumeGame);
+
+        // Boot Initialization
+        window.onload = () => {
+            resizeCanvas();
+            updateHUD();
+            requestAnimationFrame(gameLoop);
+        };
+    </script>
+</body>
+</html>
